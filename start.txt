@@ -1,0 +1,17 @@
+cd Trader.io
+cp .env.example .env
+make up          # starts full stack (~2 min first run)
+make topics      # create Kafka topics (auto-done via kafka-init)
+make seed        # load 7 days of mock historical data
+make up-mon      # add Prometheus + Grafana + Loki
+make health      # verify all services
+
+
+Service	URL	Creds
+Dashboard	http://localhost:8501	—
+API Docs	http://localhost:8000/docs	—
+Airflow	http://localhost:8080	admin/admin
+MinIO Console	http://localhost:9001	minioadmin/minioadmin123
+Kafka UI	http://localhost:8090	—
+Grafana	http://localhost:3000	admin/admin123
+Prometheus	http://localhost:9090	—

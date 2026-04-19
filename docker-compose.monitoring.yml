@@ -1,0 +1,121 @@
+networks:
+  trader-net:
+    external: true
+    name: traderio_trader-net
+
+volumes:
+  prometheus-data:
+  grafana-data:
+  loki-data:
+
+services:
+
+  # ─────────────────────────────
+  #  PROMETHEUS
+  # ─────────────────────────────
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    container_name: trader-prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=15d"
+      - "--web.enable-lifecycle"
+      - "--web.enable-admin-api"
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    networks:
+      - trader-net
+
+  # ─────────────────────────────
+  #  GRAFANA
+  # ─────────────────────────────
+  grafana:
+    image: grafana/grafana:10.4.0
+    container_name: trader-grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin123}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_INSTALL_PLUGINS: grafana-clickhouse-datasource
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+    networks:
+      - trader-net
+    depends_on:
+      - prometheus
+
+  # ─────────────────────────────
+  #  LOKI
+  # ─────────────────────────────
+  loki:
+    image: grafana/loki:2.9.0
+    container_name: trader-loki
+    restart: unless-stopped
+    ports:
+      - "3100:3100"
+    command: -config.file=/etc/loki/loki-config.yml
+    volumes:
+      - ./monitoring/loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+      - loki-data:/loki
+    networks:
+      - trader-net
+
+  # ─────────────────────────────
+  #  PROMTAIL (log shipper)
+  # ─────────────────────────────
+  promtail:
+    image: grafana/promtail:2.9.0
+    container_name: trader-promtail
+    restart: unless-stopped
+    volumes:
+      - ./monitoring/loki/promtail-config.yml:/etc/promtail/config.yml:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: -config.file=/etc/promtail/config.yml
+    networks:
+      - trader-net
+    depends_on:
+      - loki
+
+  # ─────────────────────────────
+  #  KAFKA EXPORTER (for Prometheus)
+  # ─────────────────────────────
+  kafka-exporter:
+    image: danielqsj/kafka-exporter:latest
+    container_name: trader-kafka-exporter
+    restart: unless-stopped
+    command:
+      - "--kafka.server=kafka:9092"
+    ports:
+      - "9308:9308"
+    networks:
+      - trader-net
+
+  # ─────────────────────────────
+  #  NODE EXPORTER (host metrics)
+  # ─────────────────────────────
+  node-exporter:
+    image: prom/node-exporter:v1.7.0
+    container_name: trader-node-exporter
+    restart: unless-stopped
+    ports:
+      - "9100:9100"
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - "--path.procfs=/host/proc"
+      - "--path.rootfs=/rootfs"
+      - "--path.sysfs=/host/sys"
+    networks:
+      - trader-net

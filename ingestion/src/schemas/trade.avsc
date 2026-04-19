@@ -1,0 +1,17 @@
+{
+  "type": "record",
+  "name": "Trade",
+  "namespace": "io.trader.ingestion",
+  "doc": "Raw trade tick from market data source",
+  "fields": [
+    {"name": "event_time",   "type": "long",   "doc": "Event timestamp (ms since epoch)"},
+    {"name": "symbol",       "type": "string", "doc": "Trading pair, e.g. BTCUSDT"},
+    {"name": "trade_id",     "type": "string", "doc": "Unique trade identifier"},
+    {"name": "price",        "type": "double", "doc": "Execution price"},
+    {"name": "quantity",     "type": "double", "doc": "Trade quantity"},
+    {"name": "buyer_order_id",  "type": "string", "default": ""},
+    {"name": "seller_order_id", "type": "string", "default": ""},
+    {"name": "is_buyer_maker",  "type": "boolean", "doc": "True if buyer is the market maker"},
+    {"name": "source",       "type": {"type": "enum", "name": "Source", "symbols": ["BINANCE", "ZERODHA", "MOCK"]}, "doc": "Data source"}
+  ]
+}
