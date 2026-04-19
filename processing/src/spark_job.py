@@ -216,6 +216,31 @@ def build_indicator_query(trades: DataFrame) -> object:
     )
 
 
+def log_stream_metrics(spark):
+    """Periodically log streaming query metrics for observability."""
+    import threading, time
+
+    def _log():
+        while True:
+            time.sleep(30)
+            for q in spark.streams.active:
+                prog = q.lastProgress
+                if prog:
+                    logger.info(
+                        "stream_metrics | query=%s | input_rows_per_sec=%.1f | "
+                        "processed_rows_per_sec=%.1f | batch_duration_ms=%d | "
+                        "num_input_rows=%d",
+                        q.name or q.id,
+                        prog.get("inputRowsPerSecond", 0),
+                        prog.get("processedRowsPerSecond", 0),
+                        prog.get("batchDuration", 0),
+                        prog.get("numInputRows", 0),
+                    )
+
+    t = threading.Thread(target=_log, daemon=True)
+    t.start()
+
+
 def main():
     spark = build_spark()
     spark.sparkContext.setLogLevel("WARN")
@@ -229,6 +254,7 @@ def main():
     candle_5m      = build_candle_query(trades, 5)
     indicator_q    = build_indicator_query(trades)
 
+    log_stream_metrics(spark)
     spark.streams.awaitAnyTermination()
 
 

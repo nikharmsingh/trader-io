@@ -120,6 +120,102 @@
           "legendFormat": "Memory %"
         }
       ]
+    },
+    {
+      "id": 10,
+      "title": "Spark — Input Rows / sec",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 28 },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "spark_streaming_inputRowsPerSecond",
+          "legendFormat": "{{query_name}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "rows/s", "color": { "mode": "palette-classic" } }
+      }
+    },
+    {
+      "id": 11,
+      "title": "Spark — Batch Duration (ms)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 28 },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "spark_streaming_batchDuration",
+          "legendFormat": "{{query_name}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "ms", "color": { "mode": "palette-classic" } }
+      }
+    },
+    {
+      "id": 12,
+      "title": "ClickHouse — Rows in candles_1m",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 36 },
+      "targets": [
+        {
+          "datasource": "ClickHouse",
+          "rawSql": "SELECT count() FROM trader_io.candles_1m",
+          "format": "table"
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "title": "ClickHouse — Rows in indicators",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 36 },
+      "targets": [
+        {
+          "datasource": "ClickHouse",
+          "rawSql": "SELECT count() FROM trader_io.indicators",
+          "format": "table"
+        }
+      ]
+    },
+    {
+      "id": 14,
+      "title": "ClickHouse — Trades last 5 min",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 36 },
+      "targets": [
+        {
+          "datasource": "ClickHouse",
+          "rawSql": "SELECT count() FROM trader_io.trades WHERE toDateTime(event_time/1000) >= now() - INTERVAL 5 MINUTE",
+          "format": "table"
+        }
+      ]
+    },
+    {
+      "id": 15,
+      "title": "ClickHouse — Data Freshness (max lag seconds)",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 36 },
+      "targets": [
+        {
+          "datasource": "ClickHouse",
+          "rawSql": "SELECT max(dateDiff('second', toDateTime(event_time/1000), now())) FROM trader_io.trades",
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": 0 },
+              { "color": "yellow", "value": 30 },
+              { "color": "red", "value": 120 }
+            ]
+          }
+        }
+      }
     }
   ]
 }

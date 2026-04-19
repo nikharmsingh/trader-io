@@ -357,6 +357,8 @@ services:
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin123}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    ports:
+      - "4040:4040"   # Spark Streaming UI
     networks:
       - trader-net
 
