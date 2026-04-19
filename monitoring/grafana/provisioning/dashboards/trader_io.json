@@ -162,7 +162,8 @@
         {
           "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" },
           "rawSql": "SELECT count() AS value FROM candles_1m",
-          "format": "table",
+          "queryType": "sql",
+          "format": 1,
           "refId": "A"
         }
       ]
@@ -176,7 +177,8 @@
         {
           "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" },
           "rawSql": "SELECT count() AS value FROM indicators",
-          "format": "table",
+          "queryType": "sql",
+          "format": 1,
           "refId": "A"
         }
       ]
@@ -190,7 +192,8 @@
         {
           "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" },
           "rawSql": "SELECT count() AS value FROM trades WHERE toDateTime(event_time/1000) >= now() - INTERVAL 5 MINUTE",
-          "format": "table",
+          "queryType": "sql",
+          "format": 1,
           "refId": "A"
         }
       ]
@@ -204,7 +207,8 @@
         {
           "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" },
           "rawSql": "SELECT max(dateDiff('second', toDateTime(event_time/1000), now())) AS value FROM trades",
-          "format": "table",
+          "queryType": "sql",
+          "format": 1,
           "refId": "A"
         }
       ],
