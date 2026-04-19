@@ -97,6 +97,43 @@ def main():
         )
         print(f"  ✓ {len(rows)} candles inserted for {symbol}")
 
+    # Aggregate 1m candles → 5m and 15m
+    for interval_minutes, table in [(5, "candles_5m"), (15, "candles_15m")]:
+        print(f"Aggregating 1m → {interval_minutes}m candles...")
+        client.command(f"""
+            INSERT INTO {table}
+                (symbol, interval, open_time, close_time, open, high, low, close,
+                 volume, trade_count, vwap)
+            SELECT
+                symbol, interval, open_time, close_time,
+                open, high, low, close, vol, trade_count,
+                if(vol > 0, total_pv / vol, NULL) AS vwap
+            FROM (
+                SELECT
+                    symbol,
+                    '{interval_minutes}m' AS interval,
+                    toUnixTimestamp(toStartOfInterval(
+                        toDateTime(open_time / 1000),
+                        INTERVAL {interval_minutes} MINUTE
+                    )) * 1000                                AS open_time,
+                    toUnixTimestamp(toStartOfInterval(
+                        toDateTime(open_time / 1000),
+                        INTERVAL {interval_minutes} MINUTE
+                    )) * 1000 + {interval_minutes * 60 * 1000} - 1 AS close_time,
+                    argMin(open,  open_time)                 AS open,
+                    max(high)                                AS high,
+                    min(low)                                 AS low,
+                    argMax(close, close_time)                AS close,
+                    sum(volume)                              AS vol,
+                    sum(trade_count)                         AS trade_count,
+                    sum(volume * vwap)                       AS total_pv
+                FROM candles_1m
+                GROUP BY symbol, interval, open_time, close_time
+            )
+        """)
+        rows_inserted = client.query(f"SELECT count() FROM {table}").result_rows[0][0]
+        print(f"  ✓ {rows_inserted:,} rows in {table}")
+
     # Trigger daily aggregation for seeded data
     print("Running daily aggregation on seeded data...")
     for day_offset in range(DAYS):
