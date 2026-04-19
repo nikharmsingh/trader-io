@@ -16,11 +16,13 @@ datasources:
 
   - name: ClickHouse
     type: grafana-clickhouse-datasource
-    access: proxy
-    url: http://clickhouse:8123
-    editable: false
+    uid: clickhouse
+    editable: true
     jsonData:
-      defaultDatabase: trader_io
+      host: clickhouse
+      port: 9000
+      protocol: native
       username: default
+      defaultDatabase: trader_io
     secureJsonData:
       password: clickhouse123

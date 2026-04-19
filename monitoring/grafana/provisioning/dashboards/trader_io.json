@@ -160,9 +160,10 @@
       "gridPos": { "h": 4, "w": 6, "x": 0, "y": 36 },
       "targets": [
         {
-          "datasource": "ClickHouse",
-          "rawSql": "SELECT count() FROM trader_io.candles_1m",
-          "format": "table"
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" },
+          "rawSql": "SELECT count() AS value FROM candles_1m",
+          "format": "table",
+          "refId": "A"
         }
       ]
     },
@@ -173,9 +174,10 @@
       "gridPos": { "h": 4, "w": 6, "x": 6, "y": 36 },
       "targets": [
         {
-          "datasource": "ClickHouse",
-          "rawSql": "SELECT count() FROM trader_io.indicators",
-          "format": "table"
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" },
+          "rawSql": "SELECT count() AS value FROM indicators",
+          "format": "table",
+          "refId": "A"
         }
       ]
     },
@@ -186,9 +188,10 @@
       "gridPos": { "h": 4, "w": 6, "x": 12, "y": 36 },
       "targets": [
         {
-          "datasource": "ClickHouse",
-          "rawSql": "SELECT count() FROM trader_io.trades WHERE toDateTime(event_time/1000) >= now() - INTERVAL 5 MINUTE",
-          "format": "table"
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" },
+          "rawSql": "SELECT count() AS value FROM trades WHERE toDateTime(event_time/1000) >= now() - INTERVAL 5 MINUTE",
+          "format": "table",
+          "refId": "A"
         }
       ]
     },
@@ -199,9 +202,10 @@
       "gridPos": { "h": 4, "w": 6, "x": 18, "y": 36 },
       "targets": [
         {
-          "datasource": "ClickHouse",
-          "rawSql": "SELECT max(dateDiff('second', toDateTime(event_time/1000), now())) FROM trader_io.trades",
-          "format": "table"
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" },
+          "rawSql": "SELECT max(dateDiff('second', toDateTime(event_time/1000), now())) AS value FROM trades",
+          "format": "table",
+          "refId": "A"
         }
       ],
       "fieldConfig": {
