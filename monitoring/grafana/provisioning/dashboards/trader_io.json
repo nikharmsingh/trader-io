@@ -1,229 +1,398 @@
 {
-  "title": "Trader.IO — Pipeline Monitoring",
-  "uid": "trader-io-main",
-  "tags": ["trader-io"],
-  "timezone": "browser",
-  "schemaVersion": 38,
-  "refresh": "10s",
-  "time": { "from": "now-1h", "to": "now" },
+  "id": 2,
   "panels": [
     {
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
       "id": 1,
-      "title": "API Request Rate",
-      "type": "timeseries",
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
       "targets": [
         {
           "datasource": "Prometheus",
           "expr": "rate(http_requests_total[1m])",
-          "legendFormat": "{{method}} {{endpoint}} {{status_code}}"
+          "legendFormat": "{{method}} {{endpoint}} {{status_code}}",
+          "refId": "A"
         }
-      ]
+      ],
+      "title": "API Request Rate (req/s)",
+      "type": "timeseries"
     },
     {
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
       "id": 2,
-      "title": "API p99 Latency (ms)",
-      "type": "timeseries",
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
       "targets": [
         {
           "datasource": "Prometheus",
           "expr": "histogram_quantile(0.99, rate(http_request_duration_seconds_bucket[1m])) * 1000",
-          "legendFormat": "p99 {{endpoint}}"
+          "legendFormat": "p99 {{endpoint}}",
+          "refId": "A"
         }
-      ]
+      ],
+      "title": "API p99 Latency (ms)",
+      "type": "timeseries"
     },
     {
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 8
+      },
       "id": 3,
-      "title": "Kafka Messages Produced / sec",
-      "type": "timeseries",
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
       "targets": [
         {
           "datasource": "Prometheus",
-          "expr": "rate(trader_messages_produced_total[1m])",
-          "legendFormat": "{{symbol}}"
+          "expr": "sum by (topic) (kafka_topic_partition_current_offset{topic=~\"raw.trades|processed.candles|processed.indicators|alerts\"})",
+          "legendFormat": "{{topic}}",
+          "refId": "A"
         }
-      ]
+      ],
+      "title": "Kafka \u2014 Topic Partition Offsets (messages)",
+      "type": "timeseries"
     },
     {
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 8
+      },
       "id": 4,
-      "title": "Kafka Consumer Lag",
-      "type": "timeseries",
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
       "targets": [
         {
           "datasource": "Prometheus",
-          "expr": "kafka_consumergroup_lag",
-          "legendFormat": "{{consumergroup}} {{topic}} {{partition}}"
+          "expr": "sum by (topic) (kafka_topic_partition_current_offset{topic=~\"raw.trades|processed.candles|processed.indicators|alerts\"} - kafka_topic_partition_oldest_offset{topic=~\"raw.trades|processed.candles|processed.indicators|alerts\"})",
+          "legendFormat": "{{topic}}",
+          "refId": "A"
         }
-      ]
+      ],
+      "title": "Kafka \u2014 Messages in Topics",
+      "type": "timeseries"
     },
     {
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 16
+      },
       "id": 5,
-      "title": "Producer Errors",
-      "type": "stat",
-      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 16 },
       "targets": [
         {
           "datasource": "Prometheus",
-          "expr": "sum(increase(trader_produce_errors_total[5m]))"
+          "expr": "rate(kafka_topic_partition_current_offset{topic=\"raw.trades\"}[1m])",
+          "legendFormat": "partition {{partition}}",
+          "refId": "A"
         }
-      ]
+      ],
+      "title": "Kafka \u2014 Messages / sec (raw.trades)",
+      "type": "timeseries"
     },
     {
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 12,
+        "y": 16
+      },
       "id": 6,
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "sum(http_requests_in_flight)",
+          "refId": "A"
+        }
+      ],
       "title": "API In-Flight Requests",
-      "type": "stat",
-      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 16 },
-      "targets": [
-        {
-          "datasource": "Prometheus",
-          "expr": "sum(http_requests_in_flight)"
-        }
-      ]
+      "type": "stat"
     },
     {
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 18,
+        "y": 16
+      },
       "id": 7,
-      "title": "Produce Latency p50 (ms)",
-      "type": "stat",
-      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 16 },
       "targets": [
         {
           "datasource": "Prometheus",
-          "expr": "histogram_quantile(0.50, rate(trader_produce_latency_seconds_bucket[1m])) * 1000"
+          "expr": "sum(increase(http_requests_total[5m]))",
+          "refId": "A"
         }
-      ]
+      ],
+      "title": "API Total Requests (last 5m)",
+      "type": "stat"
     },
     {
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        }
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 12,
+        "y": 20
+      },
       "id": 8,
-      "title": "System CPU Usage",
-      "type": "timeseries",
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 20 },
       "targets": [
         {
           "datasource": "Prometheus",
-          "expr": "100 - (avg by(instance)(rate(node_cpu_seconds_total{mode='idle'}[1m])) * 100)",
-          "legendFormat": "CPU %"
+          "expr": "sum(increase(http_requests_total{status_code=~\"5..\"}[5m]))",
+          "refId": "A"
         }
-      ]
+      ],
+      "title": "API Errors (5xx last 5m)",
+      "type": "stat"
     },
     {
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 18,
+        "y": 20
+      },
       "id": 9,
-      "title": "System Memory Usage",
-      "type": "timeseries",
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 20 },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "kafka_brokers",
+          "refId": "A"
+        }
+      ],
+      "title": "Kafka Brokers Online",
+      "type": "stat"
+    },
+    {
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 24
+      },
+      "id": 10,
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "100 - (avg by(instance)(rate(node_cpu_seconds_total{mode=\"idle\"}[1m])) * 100)",
+          "legendFormat": "CPU %",
+          "refId": "A"
+        }
+      ],
+      "title": "System CPU Usage (%)",
+      "type": "timeseries"
+    },
+    {
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 24
+      },
+      "id": 11,
       "targets": [
         {
           "datasource": "Prometheus",
           "expr": "(1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100",
-          "legendFormat": "Memory %"
-        }
-      ]
-    },
-    {
-      "id": 10,
-      "title": "Spark — Input Rows / sec",
-      "type": "timeseries",
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 28 },
-      "targets": [
-        {
-          "datasource": "Prometheus",
-          "expr": "spark_streaming_inputRowsPerSecond",
-          "legendFormat": "{{query_name}}"
+          "legendFormat": "Memory %",
+          "refId": "A"
         }
       ],
-      "fieldConfig": {
-        "defaults": { "unit": "rows/s", "color": { "mode": "palette-classic" } }
-      }
+      "title": "System Memory Usage (%)",
+      "type": "timeseries"
     },
     {
-      "id": 11,
-      "title": "Spark — Batch Duration (ms)",
-      "type": "timeseries",
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 28 },
-      "targets": [
-        {
-          "datasource": "Prometheus",
-          "expr": "spark_streaming_batchDuration",
-          "legendFormat": "{{query_name}}"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": { "unit": "ms", "color": { "mode": "palette-classic" } }
-      }
-    },
-    {
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 32
+      },
       "id": 12,
-      "title": "ClickHouse — Rows in candles_1m",
-      "type": "stat",
-      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 36 },
       "targets": [
         {
-          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" },
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "clickhouse"
+          },
+          "format": 1,
+          "queryType": "sql",
           "rawSql": "SELECT count() AS value FROM candles_1m",
-          "queryType": "sql",
-          "format": 1,
-          "refId": "A"
-        }
-      ]
-    },
-    {
-      "id": 13,
-      "title": "ClickHouse — Rows in indicators",
-      "type": "stat",
-      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 36 },
-      "targets": [
-        {
-          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" },
-          "rawSql": "SELECT count() AS value FROM indicators",
-          "queryType": "sql",
-          "format": 1,
-          "refId": "A"
-        }
-      ]
-    },
-    {
-      "id": 14,
-      "title": "ClickHouse — Trades last 5 min",
-      "type": "stat",
-      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 36 },
-      "targets": [
-        {
-          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" },
-          "rawSql": "SELECT count() AS value FROM trades WHERE toDateTime(event_time/1000) >= now() - INTERVAL 5 MINUTE",
-          "queryType": "sql",
-          "format": 1,
-          "refId": "A"
-        }
-      ]
-    },
-    {
-      "id": 15,
-      "title": "ClickHouse — Data Freshness (max lag seconds)",
-      "type": "stat",
-      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 36 },
-      "targets": [
-        {
-          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" },
-          "rawSql": "SELECT max(dateDiff('second', toDateTime(event_time/1000), now())) AS value FROM trades",
-          "queryType": "sql",
-          "format": 1,
           "refId": "A"
         }
       ],
+      "title": "ClickHouse \u2014 Rows in candles_1m",
+      "type": "stat"
+    },
+    {
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 6,
+        "y": 32
+      },
+      "id": 13,
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "clickhouse"
+          },
+          "format": 1,
+          "queryType": "sql",
+          "rawSql": "SELECT count() AS value FROM indicators",
+          "refId": "A"
+        }
+      ],
+      "title": "ClickHouse \u2014 Rows in indicators",
+      "type": "stat"
+    },
+    {
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 12,
+        "y": 32
+      },
+      "id": 14,
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "clickhouse"
+          },
+          "format": 1,
+          "queryType": "sql",
+          "rawSql": "SELECT count() AS value FROM trades WHERE toDateTime(event_time/1000) >= now() - INTERVAL 5 MINUTE",
+          "refId": "A"
+        }
+      ],
+      "title": "ClickHouse \u2014 Trades (last 5 min)",
+      "type": "stat"
+    },
+    {
       "fieldConfig": {
         "defaults": {
-          "unit": "s",
           "thresholds": {
             "steps": [
-              { "color": "green", "value": 0 },
-              { "color": "yellow", "value": 30 },
-              { "color": "red", "value": 120 }
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "yellow",
+                "value": 30
+              },
+              {
+                "color": "red",
+                "value": 120
+              }
             ]
-          }
+          },
+          "unit": "s"
         }
-      }
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 18,
+        "y": 32
+      },
+      "id": 15,
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "clickhouse"
+          },
+          "format": 1,
+          "queryType": "sql",
+          "rawSql": "SELECT toFloat64(max(dateDiff('second', toDateTime(event_time/1000), now()))) AS value FROM trades",
+          "refId": "A"
+        }
+      ],
+      "title": "ClickHouse \u2014 Data Lag (seconds)",
+      "type": "stat"
+    },
+    {
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 36
+      },
+      "id": 16,
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "clickhouse"
+          },
+          "format": 1,
+          "queryType": "sql",
+          "rawSql": "SELECT symbol, sum(quantity) AS volume FROM trades WHERE toDateTime(event_time/1000) >= now() - INTERVAL 1 HOUR GROUP BY symbol ORDER BY volume DESC",
+          "refId": "A"
+        }
+      ],
+      "title": "ClickHouse \u2014 Trade Volume by Symbol (last 1h)",
+      "type": "barchart"
+    },
+    {
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 36
+      },
+      "id": 17,
+      "targets": [
+        {
+          "datasource": {
+            "type": "grafana-clickhouse-datasource",
+            "uid": "clickhouse"
+          },
+          "format": 0,
+          "queryType": "sql",
+          "rawSql": "SELECT toStartOfMinute(toDateTime(open_time/1000)) AS time, count() AS candles FROM candles_1m WHERE toDateTime(open_time/1000) >= now() - INTERVAL 30 MINUTE GROUP BY time ORDER BY time",
+          "refId": "A"
+        }
+      ],
+      "title": "ClickHouse \u2014 Candles Written per Minute",
+      "type": "timeseries"
     }
-  ]
+  ],
+  "refresh": "10s",
+  "schemaVersion": 38,
+  "tags": [
+    "trader-io"
+  ],
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "timezone": "browser",
+  "title": "Trader.IO \u2014 Pipeline Monitoring",
+  "uid": "trader-io-main",
+  "version": 5
 }

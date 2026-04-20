@@ -22,8 +22,6 @@ from pyspark.sql.types import (
     StructType, StructField,
     StringType, DoubleType, LongType, BooleanType,
 )
-from pyspark.sql.window import Window
-
 from config import config
 
 logging.basicConfig(level=config.log_level)
@@ -158,26 +156,30 @@ def build_candle_query(trades: DataFrame, interval_minutes: int) -> object:
 
 
 def build_indicator_query(trades: DataFrame) -> object:
-    window_spec = Window.partitionBy("symbol").orderBy("event_time").rowsBetween(
-        -config.indicator_window_size, 0
-    )
-
-    with_indicators = (
-        trades
-        .withColumn("sma_7",  F.avg("price").over(Window.partitionBy("symbol").orderBy("event_time").rowsBetween(-6, 0)))
-        .withColumn("sma_14", F.avg("price").over(Window.partitionBy("symbol").orderBy("event_time").rowsBetween(-13, 0)))
-        .withColumn("sma_50", F.avg("price").over(Window.partitionBy("symbol").orderBy("event_time").rowsBetween(-49, 0)))
-        .select("symbol", "event_time", "price", "sma_7", "sma_14", "sma_50")
-    )
+    # Select only what we need — row-frame windows not supported in streaming;
+    # all indicator math happens inside foreachBatch on a regular batch DataFrame.
+    trade_prices = trades.select("symbol", "event_time", "price")
 
     def write_indicator_batch(batch_df, batch_id):
         if batch_df.isEmpty():
             return
         import pandas as pd
+        from pyspark.sql.window import Window as W
         from indicators import rsi, ema, macd as compute_macd
 
+        # Compute SMAs inside foreachBatch where row-frame windows are legal.
+        window7  = W.partitionBy("symbol").orderBy("event_time").rowsBetween(-6, 0)
+        window14 = W.partitionBy("symbol").orderBy("event_time").rowsBetween(-13, 0)
+        window50 = W.partitionBy("symbol").orderBy("event_time").rowsBetween(-49, 0)
+        enriched = (
+            batch_df
+            .withColumn("sma_7",  F.avg("price").over(window7))
+            .withColumn("sma_14", F.avg("price").over(window14))
+            .withColumn("sma_50", F.avg("price").over(window50))
+        )
+
         result_rows = []
-        pdf = batch_df.toPandas()
+        pdf = enriched.toPandas()
         for symbol, group in pdf.groupby("symbol"):
             g = group.sort_values("event_time").copy()
             prices = g["price"]
@@ -207,7 +209,7 @@ def build_indicator_query(trades: DataFrame) -> object:
         logger.info("Indicator batch %d written (%d rows)", batch_id, len(out))
 
     return (
-        with_indicators.writeStream
+        trade_prices.writeStream
         .foreachBatch(write_indicator_batch)
         .outputMode("append")
         .trigger(processingTime="10 seconds")
