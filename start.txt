@@ -5,6 +5,8 @@ make topics      # create Kafka topics (auto-done via kafka-init)
 make seed        # load 7 days of mock historical data
 make up-mon      # add Prometheus + Grafana + Loki
 make health      # verify all services
+make down        # That stops the main stack and monitoring stack together. 
+make clean       # wipe all volumes (reset data)
 
 
 Service	URL	Creds
