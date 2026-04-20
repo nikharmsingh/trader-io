@@ -5,16 +5,14 @@ Pipeline:
   Kafka raw.trades
     → parse JSON
     → write raw Parquet to MinIO (raw data lake)
-    → 1-min tumbling window → OHLCV candles → ClickHouse + Kafka processed.candles
+    → 1-min tumbling window → OHLCV candles → ClickHouse
     → 5-min tumbling window → OHLCV candles → ClickHouse
-    → sliding 200-tick window per symbol → SMA/EMA/RSI → ClickHouse + Kafka processed.indicators
+    → per-symbol indicator computation → ClickHouse
 
 Late data handling: 10-minute watermark on event_time.
-Checkpointing: local /tmp/spark-checkpoints (use S3/MinIO path in prod).
+Checkpointing: local /tmp/spark-checkpoints.
 """
-import json
 import logging
-import os
 
 from pyspark.sql import SparkSession, DataFrame
 from pyspark.sql import functions as F
@@ -39,17 +37,18 @@ TRADE_SCHEMA = StructType([
     StructField("source",          StringType(),  False),
 ])
 
-CLICKHOUSE_JDBC = (
-    f"jdbc:clickhouse://{config.clickhouse_host}:{config.clickhouse_http_port}"
-    f"/{config.clickhouse_database}"
-)
-CLICKHOUSE_PROPS = {
-    "user":     config.clickhouse_user,
-    "password": config.clickhouse_password,
-    "driver":   "com.clickhouse.jdbc.ClickHouseDriver",
-}
-
 MINIO_PATH = f"s3a://{config.minio_bucket_raw}/trades"
+
+
+def _ch_client():
+    import clickhouse_connect
+    return clickhouse_connect.get_client(
+        host=config.clickhouse_host,
+        port=int(config.clickhouse_http_port),
+        username=config.clickhouse_user,
+        password=config.clickhouse_password,
+        database=config.clickhouse_database,
+    )
 
 
 def build_spark() -> SparkSession:
@@ -60,7 +59,6 @@ def build_spark() -> SparkSession:
         .config("spark.sql.shuffle.partitions", "12")
         .config("spark.streaming.stopGracefullyOnShutdown", "true")
         .config("spark.sql.streaming.checkpointLocation", config.spark_checkpoint_dir)
-        # MinIO / S3A
         .config("spark.hadoop.fs.s3a.endpoint", f"http://{config.minio_endpoint}")
         .config("spark.hadoop.fs.s3a.access.key", config.minio_access_key)
         .config("spark.hadoop.fs.s3a.secret.key", config.minio_secret_key)
@@ -97,8 +95,8 @@ def parse_trades(raw: DataFrame) -> DataFrame:
     ).withWatermark("event_ts", "10 minutes")
 
 
-def write_raw_to_minio(trades: DataFrame) -> None:
-    query = (
+def write_raw_to_minio(trades: DataFrame):
+    return (
         trades.writeStream
         .outputMode("append")
         .format("parquet")
@@ -108,15 +106,13 @@ def write_raw_to_minio(trades: DataFrame) -> None:
         .trigger(processingTime="30 seconds")
         .start()
     )
-    return query
 
 
-def build_candle_query(trades: DataFrame, interval_minutes: int) -> object:
-    window_duration = f"{interval_minutes} minutes"
+def build_candle_query(trades: DataFrame, interval_minutes: int):
     candles = (
         trades.groupBy(
             F.col("symbol"),
-            F.window(F.col("event_ts"), window_duration),
+            F.window(F.col("event_ts"), f"{interval_minutes} minutes"),
         )
         .agg(
             F.first("price").alias("open"),
@@ -138,26 +134,30 @@ def build_candle_query(trades: DataFrame, interval_minutes: int) -> object:
     )
 
     table = f"candles_{interval_minutes}m"
+    columns = ["symbol", "interval", "open_time", "close_time",
+               "open", "high", "low", "close", "volume", "trade_count", "vwap"]
 
     def write_candle_batch(batch_df, batch_id):
         if batch_df.isEmpty():
             return
-        batch_df.write.jdbc(
-            url=CLICKHOUSE_JDBC,
-            table=table,
-            mode="append",
-            properties=CLICKHOUSE_PROPS,
-        )
-        logger.info("Candle batch %d written to %s (%d rows)", batch_id, table, batch_df.count())
+        pdf = batch_df.toPandas()
+        rows = [list(r) for r in pdf[columns].itertuples(index=False)]
+        _ch_client().insert(table, rows, column_names=columns)
+        logger.info("Candle batch %d → %s (%d rows)", batch_id, table, len(rows))
 
-    return candles.writeStream.foreachBatch(write_candle_batch).outputMode("update").trigger(
-        processingTime=f"{interval_minutes} minutes"
-    ).option("checkpointLocation", f"{config.spark_checkpoint_dir}/candles_{interval_minutes}m").start()
+    return (
+        candles.writeStream
+        .foreachBatch(write_candle_batch)
+        .outputMode("update")
+        .trigger(processingTime=f"{interval_minutes} minutes")
+        .option("checkpointLocation", f"{config.spark_checkpoint_dir}/candles_{interval_minutes}m")
+        .start()
+    )
 
 
-def build_indicator_query(trades: DataFrame) -> object:
-    # Select only what we need — row-frame windows not supported in streaming;
-    # all indicator math happens inside foreachBatch on a regular batch DataFrame.
+def build_indicator_query(trades: DataFrame):
+    # Row-frame windows are not supported in streaming; all indicator math
+    # happens inside foreachBatch where batch_df is a regular DataFrame.
     trade_prices = trades.select("symbol", "event_time", "price")
 
     def write_indicator_batch(batch_df, batch_id):
@@ -167,7 +167,6 @@ def build_indicator_query(trades: DataFrame) -> object:
         from pyspark.sql.window import Window as W
         from indicators import rsi, ema, macd as compute_macd
 
-        # Compute SMAs inside foreachBatch where row-frame windows are legal.
         window7  = W.partitionBy("symbol").orderBy("event_time").rowsBetween(-6, 0)
         window14 = W.partitionBy("symbol").orderBy("event_time").rowsBetween(-13, 0)
         window50 = W.partitionBy("symbol").orderBy("event_time").rowsBetween(-49, 0)
@@ -196,17 +195,11 @@ def build_indicator_query(trades: DataFrame) -> object:
             return
 
         out = pd.concat(result_rows)
-        out_spark = batch_df.sparkSession.createDataFrame(out[[
-            "symbol", "event_time", "sma_7", "sma_14", "sma_50",
-            "ema_12", "ema_26", "rsi_14", "macd", "macd_signal", "macd_histogram",
-        ]])
-        out_spark.write.jdbc(
-            url=CLICKHOUSE_JDBC,
-            table="indicators",
-            mode="append",
-            properties=CLICKHOUSE_PROPS,
-        )
-        logger.info("Indicator batch %d written (%d rows)", batch_id, len(out))
+        cols = ["symbol", "event_time", "sma_7", "sma_14", "sma_50",
+                "ema_12", "ema_26", "rsi_14", "macd", "macd_signal", "macd_histogram"]
+        rows = [list(r) for r in out[cols].itertuples(index=False)]
+        _ch_client().insert("indicators", rows, column_names=cols)
+        logger.info("Indicator batch %d written (%d rows)", batch_id, len(rows))
 
     return (
         trade_prices.writeStream
@@ -219,7 +212,6 @@ def build_indicator_query(trades: DataFrame) -> object:
 
 
 def log_stream_metrics(spark):
-    """Periodically log streaming query metrics for observability."""
     import threading, time
 
     def _log():
@@ -239,8 +231,7 @@ def log_stream_metrics(spark):
                         prog.get("numInputRows", 0),
                     )
 
-    t = threading.Thread(target=_log, daemon=True)
-    t.start()
+    threading.Thread(target=_log, daemon=True).start()
 
 
 def main():
@@ -248,13 +239,13 @@ def main():
     spark.sparkContext.setLogLevel("WARN")
     logger.info("Spark Structured Streaming job starting...")
 
-    raw = read_kafka_stream(spark)
-    trades = parse_trades(raw)
+    raw        = read_kafka_stream(spark)
+    trades     = parse_trades(raw)
 
-    raw_query      = write_raw_to_minio(trades)
-    candle_1m      = build_candle_query(trades, 1)
-    candle_5m      = build_candle_query(trades, 5)
-    indicator_q    = build_indicator_query(trades)
+    write_raw_to_minio(trades)
+    build_candle_query(trades, 1)
+    build_candle_query(trades, 5)
+    build_indicator_query(trades)
 
     log_stream_metrics(spark)
     spark.streams.awaitAnyTermination()
